@@ -14,7 +14,7 @@ var apiPort = builder.Configuration.GetValue<int>("ServerSettings:ApiPort", 7001
 // ÊÍÏíÏ ÇáÜ IP ÇáãäÇÓÈ
 string bindIP;
 if (useAllInterfaces)
-{
+{ 
     // ÇÓÊãÚ Úáì ÌãíÚ ÇáÜ IPs
     bindIP = "0.0.0.0";
 }
@@ -95,27 +95,81 @@ static List<string> GetLocalIPAddresses()
 // ChatHub Class
 public class ChatHub : Hub
 {
+    // ÊÎÒíä ãÚÑİÇÊ ÇáãÓÊÎÏãíä (ÇÎÊíÇÑí)
+    private static readonly Dictionary<string, string> _userConnections = new();
 
-    public async Task SendMessageToUser(int fromUserId, int toUserId, string message)
+    public override async Task OnConnectedAsync()
     {
-        await Clients.User(toUserId.ToString())
-            .SendAsync("ReceiveMessage", fromUserId, toUserId, message, DateTime.Now);
+        var connectionId = Context.ConnectionId;
+        System.Diagnostics.Debug.WriteLine($"Client connected: {connectionId}");
+
+        // ãÍÇæáÉ ÇáÍÕæá Úáì ãÚÑİ ÇáãÓÊÎÏã ãä ÇáÜ Query String
+        var httpContext = Context.GetHttpContext();
+        var userId = httpContext?.Request.Query["userId"].ToString();
+
+        if (!string.IsNullOrEmpty(userId))
+        {
+            _userConnections[userId] = connectionId;
+            await Groups.AddToGroupAsync(connectionId, userId);
+            System.Diagnostics.Debug.WriteLine($"User {userId} added to group");
+        }
+
+        await base.OnConnectedAsync();
     }
 
     public async Task SetUserIdentifier(string userId)
     {
-        await Groups.AddToGroupAsync(Context.ConnectionId, userId);
+        var connectionId = Context.ConnectionId;
+        System.Diagnostics.Debug.WriteLine($"SetUserIdentifier called: UserId={userId}, ConnectionId={connectionId}");
+
+        _userConnections[userId] = connectionId;
+        await Groups.AddToGroupAsync(connectionId, userId);
+
+        System.Diagnostics.Debug.WriteLine($"User {userId} added to group successfully");
     }
 
-    public override async Task OnConnectedAsync()
+    public async Task SendMessageToUser(int fromUserId, int toUserId, string message)
     {
-        Console.WriteLine($"Client connected: {Context.ConnectionId}");
-        await base.OnConnectedAsync();
+        System.Diagnostics.Debug.WriteLine($"SendMessageToUser: From={fromUserId}, To={toUserId}, Msg={message}");
+
+        // ãÍÇæáÉ ÇáÅÑÓÇá ááãÓÊÎÏã ÇáãÍÏÏ
+        try
+        {
+            // ØÑíŞÉ 1: ÇÓÊÎÏÇã Groups
+            await Clients.Group(toUserId.ToString())
+                .SendAsync("ReceiveMessage", fromUserId, toUserId, message, DateTime.Now);
+
+            // ØÑíŞÉ 2: ÇÓÊÎÏÇã User (ÅĞÇ ßÇä áÏíß Authentication)
+            // await Clients.User(toUserId.ToString())
+            //     .SendAsync("ReceiveMessage", fromUserId, toUserId, message, DateTime.Now);
+
+            // ØÑíŞÉ 3: ÇÓÊÎÏÇã Client (ÅĞÇ ßäÊ ÊÚÑİ ConnectionId)
+            // if (_userConnections.TryGetValue(toUserId.ToString(), out var connectionId))
+            // {
+            //     await Clients.Client(connectionId)
+            //         .SendAsync("ReceiveMessage", fromUserId, toUserId, message, DateTime.Now);
+            // }
+
+            System.Diagnostics.Debug.WriteLine($"Message sent to group {toUserId}");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error sending message: {ex.Message}");
+        }
     }
 
     public override async Task OnDisconnectedAsync(Exception exception)
     {
-        Console.WriteLine($"Client disconnected: {Context.ConnectionId}");
+        var connectionId = Context.ConnectionId;
+        System.Diagnostics.Debug.WriteLine($"Client disconnected: {connectionId}");
+
+        // ÅÒÇáÉ ÇáãÓÊÎÏã ãä ÇáŞÇãæÓ
+        var user = _userConnections.FirstOrDefault(x => x.Value == connectionId);
+        if (!string.IsNullOrEmpty(user.Key))
+        {
+            _userConnections.Remove(user.Key);
+        }
+
         await base.OnDisconnectedAsync(exception);
     }
 }
