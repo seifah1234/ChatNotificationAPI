@@ -1,26 +1,26 @@
-using Microsoft.AspNetCore.SignalR;
+ï»¿using Microsoft.AspNetCore.SignalR;
 using System;
 using System.Net;
 using System.Net.Sockets;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ŞÑÇÁÉ ÇáÅÚÏÇÏÇÊ
+// Ù‚Ø±Ø§Ø¡Ø© Ø§Ù„Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª
 var preferredIP = builder.Configuration["ServerSettings:PreferredIP"];
 var useAllInterfaces = builder.Configuration.GetValue<bool>("ServerSettings:UseAllInterfaces", false);
 var signalRPort = builder.Configuration.GetValue<int>("ServerSettings:SignalRPort", 5000);
 var apiPort = builder.Configuration.GetValue<int>("ServerSettings:ApiPort", 7001);
 
-// ÊÍÏíÏ ÇáÜ IP ÇáãäÇÓÈ
+// ØªØ­Ø¯ÙŠØ¯ Ø§Ù„Ù€ IP Ø§Ù„Ù…Ù†Ø§Ø³Ø¨
 string bindIP;
 if (useAllInterfaces)
 {
-    // ÇÓÊãÚ Úáì ÌãíÚ ÇáÜ IPs
+    // Ø§Ø³ØªÙ…Ø¹ Ø¹Ù„Ù‰ Ø¬Ù…ÙŠØ¹ Ø§Ù„Ù€ IPs
     bindIP = "0.0.0.0";
 }
 else
 {
-    // ÊÍŞŞ ãä æÌæÏ ÇáÜ IP ÇáãİÖá
+    // ØªØ­Ù‚Ù‚ Ù…Ù† ÙˆØ¬ÙˆØ¯ Ø§Ù„Ù€ IP Ø§Ù„Ù…ÙØ¶Ù„
     var localIPs = GetLocalIPAddresses();
     if (localIPs.Contains(preferredIP))
     {
@@ -31,7 +31,7 @@ else
         Console.WriteLine($"Warning: IP {preferredIP} not found on this machine.");
         Console.WriteLine($"Available IPs: {string.Join(", ", localIPs)}");
 
-        // ÇÓÊÎÏã Ãæá IP ãÊÇÍ (ÛíÑ localhost)
+        // Ø§Ø³ØªØ®Ø¯Ù… Ø£ÙˆÙ„ IP Ù…ØªØ§Ø­ (ØºÙŠØ± localhost)
         var availableIP = localIPs.FirstOrDefault(ip => ip != "127.0.0.1" && ip != "::1");
         bindIP = availableIP ?? "localhost";
         Console.WriteLine($"Using fallback IP: {bindIP}");
@@ -41,13 +41,13 @@ else
 Console.WriteLine($"Starting server on: http://{bindIP}:{apiPort}");
 Console.WriteLine($"Also listening on: http://localhost:{apiPort}");
 
-// Êßæíä Kestrel
-// ÊÃßÏ ãä åĞÇ ÇáÓØÑ
+// ØªÙƒÙˆÙŠÙ† Kestrel
+// ØªØ£ÙƒØ¯ Ù…Ù† Ù‡Ø°Ø§ Ø§Ù„Ø³Ø·Ø±
 builder.WebHost.UseUrls("http://0.0.0.0:7001", "http://localhost:7001");
-// ÅÖÇİÉ SignalR
+// Ø¥Ø¶Ø§ÙØ© SignalR
 builder.Services.AddSignalR();
 
-// ÅÖÇİÉ CORS
+// Ø¥Ø¶Ø§ÙØ© CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowWPFClient", policy =>
@@ -55,19 +55,19 @@ builder.Services.AddCors(options =>
         policy.AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials()
-              .SetIsOriginAllowed(_ => true); // ááÇÎÊÈÇÑ İŞØ
+              .SetIsOriginAllowed(_ => true); // Ù„Ù„Ø§Ø®ØªØ¨Ø§Ø± ÙÙ‚Ø·
     });
 });
 
 var app = builder.Build();
 
-// ÇÓÊÎÏÇã CORS
+// Ø§Ø³ØªØ®Ø¯Ø§Ù… CORS
 app.UseCors("AllowWPFClient");
 
 // Map SignalR Hub
 app.MapHub<ChatHub>("/chatHub");
 
-// ÅÖÇİÉ ÕİÍÉ ÈÓíØÉ ááÇÎÊÈÇÑ
+// Ø¥Ø¶Ø§ÙØ© ØµÙØ­Ø© Ø¨Ø³ÙŠØ·Ø© Ù„Ù„Ø§Ø®ØªØ¨Ø§Ø±
 app.MapGet("/", () => "SignalR Server is running!");
 
 app.Run();
@@ -85,7 +85,7 @@ static List<string> GetLocalIPAddresses()
         }
     }
 
-    // ÃÖİ localhost ÏÇÆãÇğ
+    // Ø£Ø¶Ù localhost Ø¯Ø§Ø¦Ù…Ø§Ù‹
     if (!ips.Contains("127.0.0.1"))
         ips.Add("127.0.0.1");
 
@@ -93,7 +93,7 @@ static List<string> GetLocalIPAddresses()
 }
 
 // ChatHub Class
-// ChatHub Class - ÇáÊÕÍíÍ
+// ChatHub Class - Ø§Ù„ØªØµØ­ÙŠØ­
 public class ChatHub : Hub
 {
     private static readonly Dictionary<string, string> _userConnections = new();
@@ -126,16 +126,49 @@ public class ChatHub : Hub
         Console.WriteLine($"User {userId} added to group successfully");
     }
 
+    // âœ… Ø§Ù†Ø¶Ù…Ø§Ù… Ù…Ø³ØªØ®Ø¯Ù… Ø¥Ù„Ù‰ Ù…Ø¬Ù…ÙˆØ¹Ø©
+    public async Task JoinGroup(int groupId)
+    {
+        var connectionId = Context.ConnectionId;
+        var groupName = $"group_{groupId}";
+        await Groups.AddToGroupAsync(connectionId, groupName);
+        Console.WriteLine($"Connection {connectionId} joined group {groupName}");
+    }
+
+    // âœ… Ù…ØºØ§Ø¯Ø±Ø© Ù…Ø³ØªØ®Ø¯Ù… Ù…Ù† Ù…Ø¬Ù…ÙˆØ¹Ø©
+    public async Task LeaveGroup(int groupId)
+    {
+        var connectionId = Context.ConnectionId;
+        var groupName = $"group_{groupId}";
+        await Groups.RemoveFromGroupAsync(connectionId, groupName);
+        Console.WriteLine($"Connection {connectionId} left group {groupName}");
+    }
+
+    // âœ… Ø¥Ø±Ø³Ø§Ù„ Ø±Ø³Ø§Ù„Ø© Ù…Ø¬Ù…ÙˆØ¹Ø©
+    public async Task SendGroupMessage(int groupId, int senderId, string message, string senderName)
+    {
+        var groupName = $"group_{groupId}";
+        Console.WriteLine($"SendGroupMessage: Group={groupId}, Sender={senderId}, Msg={message}");
+
+        try
+        {
+            await Clients.Group(groupName).SendAsync("ReceiveGroupMessage", groupId, senderId, message, DateTime.Now, senderName);
+            Console.WriteLine($"Message sent to group {groupName}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error sending group message: {ex.Message}");
+        }
+    }
+
     public async Task SendMessageToUser(int fromUserId, int toUserId, string message)
     {
         Console.WriteLine($"SendMessageToUser: From={fromUserId}, To={toUserId}, Msg={message}");
 
         try
         {
-            // ÅÑÓÇá Åáì ÇáãÌãæÚÉ (ÇáØÑíŞÉ ÇáÕÍíÍÉ)
             await Clients.Group(toUserId.ToString())
                 .SendAsync("ReceiveMessage", fromUserId, toUserId, message, DateTime.Now);
-
             Console.WriteLine($"Message sent to group {toUserId}");
         }
         catch (Exception ex)
@@ -144,17 +177,14 @@ public class ChatHub : Hub
         }
     }
 
-    // ÊÕÍíÍ ÏÇáÉ MessageDelivered - ÇÓÊÎÏã Groups ÈÏáÇğ ãä User
     public async Task MessageDelivered(int fromUserId, int toUserId)
     {
         Console.WriteLine($"MessageDelivered: From={fromUserId}, To={toUserId}");
 
         try
         {
-            // ÅÑÓÇá ÅÔÚÇÑ ÇáÊÓáíã Åáì ÇáãÌãæÚÉ
             await Clients.Group(toUserId.ToString())
                 .SendAsync("MessageDelivered", fromUserId, toUserId);
-
             Console.WriteLine($"Delivered notification sent to group {toUserId}");
         }
         catch (Exception ex)
@@ -170,13 +200,9 @@ public class ChatHub : Hub
             .SendAsync("MessageRead", fromUserId, toUserId);
     }
 
-    // ÃÖİ åĞå ÇáÏæÇá İí ChatHub Úáì ÇáÓíÑİÑ
-
     public async Task SendTaskNotification(string notificationType, int taskId, int fromUserId, int toUserId, string taskDescription, DateTime timestamp)
     {
         Console.WriteLine($"Task notification: {notificationType} - Task {taskId} to user {toUserId}");
-
-        // ÅÑÓÇá ÅÔÚÇÑ ááãÓÊÎÏã ÇáãÍÏÏ
         await Clients.Group(toUserId.ToString())
             .SendAsync("ReceiveTaskNotification", notificationType, taskId, fromUserId, taskDescription, timestamp);
     }
