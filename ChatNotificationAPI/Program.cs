@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using System;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 
@@ -96,7 +97,9 @@ static List<string> GetLocalIPAddresses()
 // ChatHub Class - التصحيح
 public class ChatHub : Hub
 {
-    private static readonly Dictionary<string, string> _userConnections = new();
+    // FIX: Use thread-safe dictionary
+    private static readonly ConcurrentDictionary<string, string> _userConnections = new();
+    private static readonly ConcurrentDictionary<string, HashSet<string>> _userConnectionSets = new();
 
     public override async Task OnConnectedAsync()
     {
@@ -108,9 +111,16 @@ public class ChatHub : Hub
 
         if (!string.IsNullOrEmpty(userId))
         {
+            // Store connection
             _userConnections[userId] = connectionId;
+
+            // Track multiple connections for same user
+            _userConnectionSets.AddOrUpdate(userId,
+                _ => new HashSet<string> { connectionId },
+                (_, set) => { set.Add(connectionId); return set; });
+
             await Groups.AddToGroupAsync(connectionId, userId);
-            Console.WriteLine($"User {userId} added to group");
+            Console.WriteLine($"User {userId} connected and added to group");
         }
 
         await base.OnConnectedAsync();
@@ -122,8 +132,13 @@ public class ChatHub : Hub
         Console.WriteLine($"SetUserIdentifier: UserId={userId}, ConnectionId={connectionId}");
 
         _userConnections[userId] = connectionId;
+
+        _userConnectionSets.AddOrUpdate(userId,
+            _ => new HashSet<string> { connectionId },
+            (_, set) => { set.Add(connectionId); return set; });
+
         await Groups.AddToGroupAsync(connectionId, userId);
-        Console.WriteLine($"User {userId} added to group successfully");
+        Console.WriteLine($"User {userId} registered successfully");
     }
 
     // ✅ انضمام مستخدم إلى مجموعة
@@ -161,10 +176,43 @@ public class ChatHub : Hub
         }
     }
 
+    // FIX: Add GroupMessageEdited handler
+    public async Task GroupMessageEdited(int messageId, int groupId, string newText)
+    {
+        var groupName = $"group_{groupId}";
+        Console.WriteLine($"GroupMessageEdited: MessageId={messageId}, GroupId={groupId}");
+
+        try
+        {
+            await Clients.Group(groupName).SendAsync("GroupMessageEdited", messageId, groupId, newText);
+            Console.WriteLine($"Edit notification sent to group {groupName}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error sending edit notification: {ex.Message}");
+        }
+    }
+
+    // FIX: Add GroupMessageDeleted handler
+    public async Task GroupMessageDeleted(int messageId, int groupId)
+    {
+        var groupName = $"group_{groupId}";
+        Console.WriteLine($"GroupMessageDeleted: MessageId={messageId}, GroupId={groupId}");
+
+        try
+        {
+            await Clients.Group(groupName).SendAsync("GroupMessageDeleted", messageId, groupId);
+            Console.WriteLine($"Delete notification sent to group {groupName}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error sending delete notification: {ex.Message}");
+        }
+    }
+
     public async Task MarkGroupMessagesRead(int groupId, int userId)
     {
         var groupName = $"group_{groupId}";
-        // أبلغ الجروب إن الـ userId قرأ
         await Clients.Group(groupName)
             .SendAsync("GroupMessagesRead", groupId, userId, DateTime.Now);
     }
@@ -175,9 +223,15 @@ public class ChatHub : Hub
 
         try
         {
+            // FIX: Send to BOTH users' groups so sender gets confirmation too
             await Clients.Group(toUserId.ToString())
                 .SendAsync("ReceiveMessage", fromUserId, toUserId, message, DateTime.Now);
-            Console.WriteLine($"Message sent to group {toUserId}");
+
+            // Also send to sender for confirmation
+            await Clients.Group(fromUserId.ToString())
+                .SendAsync("ReceiveMessage", fromUserId, toUserId, message, DateTime.Now);
+
+            Console.WriteLine($"Message sent to groups {toUserId} and {fromUserId}");
         }
         catch (Exception ex)
         {
@@ -191,9 +245,12 @@ public class ChatHub : Hub
 
         try
         {
+            // FIX: Send to both users
             await Clients.Group(toUserId.ToString())
                 .SendAsync("MessageDelivered", fromUserId, toUserId);
-            Console.WriteLine($"Delivered notification sent to group {toUserId}");
+            await Clients.Group(fromUserId.ToString())
+                .SendAsync("MessageDelivered", fromUserId, toUserId);
+            Console.WriteLine($"Delivered notification sent");
         }
         catch (Exception ex)
         {
@@ -201,23 +258,77 @@ public class ChatHub : Hub
         }
     }
 
-    public async Task MessageDeleted(int messageId, int toUserId)
-    {
-        await Clients.Group(toUserId.ToString())
-            .SendAsync("MessageDeleted", messageId);
-    }
-
-    public async Task MessageEdited(int messageId, int toUserId, string newText)
-    {
-        await Clients.Group(toUserId.ToString())
-            .SendAsync("MessageEdited", messageId, newText);
-    }
-
     public async Task MessageRead(int fromUserId, int toUserId)
     {
         Console.WriteLine($"MessageRead: From={fromUserId}, To={toUserId}");
-        await Clients.Group(toUserId.ToString())
-            .SendAsync("MessageRead", fromUserId, toUserId);
+
+        try
+        {
+            // FIX: Send to both users
+            await Clients.Group(toUserId.ToString())
+                .SendAsync("MessageRead", fromUserId, toUserId);
+            await Clients.Group(fromUserId.ToString())
+                .SendAsync("MessageRead", fromUserId, toUserId);
+            Console.WriteLine($"Read notification sent");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error sending read notification: {ex.Message}");
+        }
+    }
+
+    // FIX: Make sure this sends to both users
+    public async Task MessageDeleted(int messageId, int toUserId)
+    {
+        Console.WriteLine($"MessageDeleted: MessageId={messageId}, To={toUserId}");
+
+        try
+        {
+            await Clients.Group(toUserId.ToString())
+                .SendAsync("MessageDeleted", messageId);
+
+            // FIX: Get sender ID from context and notify them too
+            var connectionId = Context.ConnectionId;
+            var senderEntry = _userConnections.FirstOrDefault(x => x.Value == connectionId);
+            if (!string.IsNullOrEmpty(senderEntry.Key))
+            {
+                await Clients.Group(senderEntry.Key)
+                    .SendAsync("MessageDeleted", messageId);
+            }
+
+            Console.WriteLine($"Delete notification sent");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error sending delete notification: {ex.Message}");
+        }
+    }
+
+    // FIX: Make sure this sends to both users
+    public async Task MessageEdited(int messageId, int toUserId, string newText)
+    {
+        Console.WriteLine($"MessageEdited: MessageId={messageId}, To={toUserId}");
+
+        try
+        {
+            await Clients.Group(toUserId.ToString())
+                .SendAsync("MessageEdited", messageId, newText);
+
+            // FIX: Get sender ID from context and notify them too
+            var connectionId = Context.ConnectionId;
+            var senderEntry = _userConnections.FirstOrDefault(x => x.Value == connectionId);
+            if (!string.IsNullOrEmpty(senderEntry.Key))
+            {
+                await Clients.Group(senderEntry.Key)
+                    .SendAsync("MessageEdited", messageId, newText);
+            }
+
+            Console.WriteLine($"Edit notification sent");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error sending edit notification: {ex.Message}");
+        }
     }
 
     public async Task SendTaskNotification(string notificationType, int taskId, int fromUserId, int toUserId, string taskDescription, DateTime timestamp)
@@ -232,10 +343,24 @@ public class ChatHub : Hub
         var connectionId = Context.ConnectionId;
         Console.WriteLine($"Client disconnected: {connectionId}");
 
-        var user = _userConnections.FirstOrDefault(x => x.Value == connectionId);
-        if (!string.IsNullOrEmpty(user.Key))
+        // FIX: Clean up all connection tracking
+        var userEntry = _userConnections.FirstOrDefault(x => x.Value == connectionId);
+        if (!string.IsNullOrEmpty(userEntry.Key))
         {
-            _userConnections.Remove(user.Key);
+            // Remove from main dictionary
+            _userConnections.TryRemove(userEntry.Key, out _);
+
+            // Remove from connection set
+            if (_userConnectionSets.TryGetValue(userEntry.Key, out var connections))
+            {
+                connections.Remove(connectionId);
+                if (connections.Count == 0)
+                {
+                    _userConnectionSets.TryRemove(userEntry.Key, out _);
+                }
+            }
+
+            Console.WriteLine($"User {userEntry.Key} disconnected");
         }
 
         await base.OnDisconnectedAsync(exception);
