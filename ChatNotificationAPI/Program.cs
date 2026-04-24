@@ -161,6 +161,14 @@ public class ChatHub : Hub
         }
     }
 
+    public async Task MarkGroupMessagesRead(int groupId, int userId)
+    {
+        var groupName = $"group_{groupId}";
+        // أبلغ الجروب إن الـ userId قرأ
+        await Clients.Group(groupName)
+            .SendAsync("GroupMessagesRead", groupId, userId, DateTime.Now);
+    }
+
     public async Task SendMessageToUser(int fromUserId, int toUserId, string message)
     {
         Console.WriteLine($"SendMessageToUser: From={fromUserId}, To={toUserId}, Msg={message}");
@@ -191,6 +199,18 @@ public class ChatHub : Hub
         {
             Console.WriteLine($"Error sending delivered notification: {ex.Message}");
         }
+    }
+
+    public async Task MessageDeleted(int messageId, int toUserId)
+    {
+        await Clients.Group(toUserId.ToString())
+            .SendAsync("MessageDeleted", messageId);
+    }
+
+    public async Task MessageEdited(int messageId, int toUserId, string newText)
+    {
+        await Clients.Group(toUserId.ToString())
+            .SendAsync("MessageEdited", messageId, newText);
     }
 
     public async Task MessageRead(int fromUserId, int toUserId)
